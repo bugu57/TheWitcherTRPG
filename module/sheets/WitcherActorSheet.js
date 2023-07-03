@@ -72,11 +72,46 @@ export default class WitcherActorSheet extends ActorSheet {
       }
     });
 
+    // Crafting section
     data.allComponents = actor.getList("component");
-    data.components = data.allComponents.filter(i => i.system.type != "substances");
-    data.valuables = items.filter(i => i.type == "valuable" || i.type == "mount" || i.type == "alchemical" ||
-      i.type == "mutagen" || (i.type == "enhancement" && i.system.type != "armor" && i.system.applied == false));
-    data.diagrams = actor.getList("diagrams");
+    data.craftingMaterials = data.allComponents.filter(i => i.system.type == "crafting-material" || i.system.type == "component");
+    data.ingotsAndMinerals = data.allComponents.filter(i => i.system.type == "minerals");
+    data.hidesAndAnimalParts = data.allComponents.filter(i => i.system.type == "animal-parts");
+    data.enhancements = items.filter(i => i.type == "enhancement" && i.system.type != "armor" && !i.system.applied);
+
+    // Valuables Section
+    data.clothingAndContainers = items.filter(i => i.type == "valuable" && (i.system.type == "clothing" || i.system.type == "containers"));
+    data.general = items.filter(i => i.type == "valuable" && (i.system.type == "genera" || !i.system.type));
+    data.foodAndDrinks = items.filter(i => i.type == "valuable" && i.system.type == "food-drink");
+    data.toolkits = items.filter(i => i.type == "valuable" && i.system.type == "toolkit");
+    data.questItems = items.filter(i => i.type == "valuable" && i.system.type == "quest-item");
+    data.mounts = items.filter(i => i.type == "mount");
+    data.mountAccessories = items.filter(i => i.type == "valuable" && i.system.type == "mount-accessories");
+
+    // Alchemy section
+    data.alchemicalItems = items.filter(i => (i.type == "valuable" && i.system.type == "alchemical-item") || (i.type == "alchemical" && i.system.type == "alchemical"));
+    data.witcherPotions = items.filter(i => i.type == "alchemical" && (i.system.type == "decoction" || i.system.type == "potion"));
+    data.oils = items.filter(i => i.type == "alchemical" && i.system.type == "oil");
+    data.alchemicalTreatments = items.filter(i => i.type == "component" && i.system.type == "alchemical");
+    data.mutagens = items.filter(i => i.type == "mutagen");
+    
+    // Formulae
+    data.alchemicalItemDiagrams = actor.getList("diagrams").filter(d => d.system.type == "alchemical" || !d.system.type).map(sanitizeDescription);
+    data.potionDiagrams = actor.getList("diagrams").filter(d => d.system.type == "potion").map(sanitizeDescription);
+    data.decoctionDiagrams = actor.getList("diagrams").filter(d => d.system.type == "decoction").map(sanitizeDescription);
+    data.oilDiagrams = actor.getList("diagrams").filter(d => d.system.type == "oil").map(sanitizeDescription);
+    
+    // Diagrams
+    data.ingredientDiagrams = actor.getList("diagrams").filter(d => d.system.type == "ingredients").map(sanitizeDescription);
+    data.weaponDiagrams = actor.getList("diagrams").filter(d => d.system.type == "weapon").map(sanitizeDescription);
+    data.armorDiagrams = actor.getList("diagrams").filter(d => d.system.type == "armor").map(sanitizeDescription);
+    data.elderfolkWeaponDiagrams = actor.getList("diagrams").filter(d => d.system.type == "armor-enhancement").map(sanitizeDescription);
+    data.elderfolkArmorDiagrams = actor.getList("diagrams").filter(d => d.system.type == "elderfolk-weapon").map(sanitizeDescription);
+    data.ammunitionDiagrams = actor.getList("diagrams").filter(d => d.system.type == "ammunition").map(sanitizeDescription);
+    data.bombDiagrams = actor.getList("diagrams").filter(d => d.system.type == "bomb").map(sanitizeDescription);
+    data.trapDiagrams = actor.getList("diagrams").filter(d => d.system.type == "traps").map(sanitizeDescription);
+
+    // Others
     data.spells = actor.getList("spell");
 
     data.professions = actor.getList("profession");
@@ -84,6 +119,25 @@ export default class WitcherActorSheet extends ActorSheet {
 
     data.races = actor.getList("race");
     data.race = data.races[0];
+
+    // Helping functions
+    /** Sanitizes description if it contains forbidden html tags. */
+    function sanitizeDescription(item) {
+      if (!item.system.description) {
+        return item;
+      }
+
+      const regex = /(<.+?>)/g;
+      const whiteList = ["<p>", "</p>"];
+      const tagsInText = item.system.description.match(regex);
+      const itemCopy = JSON.parse(JSON.stringify(item));
+      if (tagsInText.some(i => !whiteList.includes(i))) {
+        const temp = document.createElement('div');
+        temp.textContent = itemCopy.system.description;
+        itemCopy.system.description = temp.innerHTML;
+      }
+      return itemCopy;
+    }
 
     Array.prototype.sum = function (prop) {
       var total = 0
@@ -175,6 +229,7 @@ export default class WitcherActorSheet extends ActorSheet {
     html.find(".hp-value").change(this._onHPChanged.bind(this));
     html.find(".inline-edit").change(this._onInlineEdit.bind(this));
     html.find(".item-edit").on("click", this._onItemEdit.bind(this));
+    html.find(".item-show").on("click", this._onItemShow.bind(this));
     html.find(".item-weapon-display").on("click", this._onItemDisplayInfo.bind(this));
     html.find(".item-armor-display").on("click", this._onItemDisplayInfo.bind(this));
     html.find(".item-valuable-display").on("click", this._onItemDisplayInfo.bind(this));
@@ -931,11 +986,21 @@ export default class WitcherActorSheet extends ActorSheet {
     }
 
     if (element.dataset.itemtype == "component") {
-      if (element.dataset.subtype) {
+      if (element.dataset.subtype == "alchemical") {
+        itemData.system = { type: element.dataset.subtype }
+      } else if (element.dataset.subtype) {
         itemData.system = { type: "substances", substanceType: element.dataset.subtype }
       } else {
         itemData.system = { type: "component", substanceType: element.dataset.subtype }
       }
+    }
+
+    if (element.dataset.itemtype == "valuable") {
+      itemData.system = { type: "genera" };
+    }
+
+    if (element.dataset.itemtype == "diagram") {
+      itemData.system = { type: "alchemical", level: "novice", isFormulae: true };
     }
 
     await Item.create(itemData, { parent: this.actor })
@@ -1153,23 +1218,30 @@ export default class WitcherActorSheet extends ActorSheet {
 
     let focusOptions = `<option value="0"> </option>`
     let secondFocusOptions = `<option value="0" selected> </option>`
-    if (this.actor.system.focus1.name) {
+
+    let useFocus = false
+    if (this.actor.system.focus1.value > 0) {
       focusOptions += `<option value="${this.actor.system.focus1.value}" selected> ${this.actor.system.focus1.name} (${this.actor.system.focus1.value}) </option>`;
       secondFocusOptions += `<option value="${this.actor.system.focus1.value}"> ${this.actor.system.focus1.name} (${this.actor.system.focus1.value}) </option>`;
+      useFocus = true
     }
-    if (this.actor.system.focus2.name) {
+    if (this.actor.system.focus2.value > 0) {
       focusOptions += `<option value="${this.actor.system.focus2.value}"> ${this.actor.system.focus2.name} (${this.actor.system.focus2.value}) </option>`;
       secondFocusOptions += `<option value="${this.actor.system.focus2.value}"> ${this.actor.system.focus2.name} (${this.actor.system.focus2.value}) </option>`;
+      useFocus = true
     }
-    if (this.actor.system.focus3.name) {
+    if (this.actor.system.focus3.value > 0) {
       focusOptions += `<option value="${this.actor.system.focus3.value}"> ${this.actor.system.focus3.name} (${this.actor.system.focus3.value}) </option>`;
       secondFocusOptions += `<option value="${this.actor.system.focus3.value}"> ${this.actor.system.focus3.name} (${this.actor.system.focus3.value}) </option>`;
+      useFocus = true
     }
-    if (this.actor.system.focus4.name) {
+    if (this.actor.system.focus4.value > 0) {
       focusOptions += `<option value="${this.actor.system.focus4.value}"> ${this.actor.system.focus4.name} (${this.actor.system.focus4.value}) </option>`;
       secondFocusOptions += `<option value="${this.actor.system.focus4.value}"> ${this.actor.system.focus4.name} (${this.actor.system.focus4.value}) </option>`;
+      useFocus = true
     }
-    if (this.actor.system.focus1.name || this.actor.system.focus2.name || this.actor.system.focus3.name || this.actor.system.focus4.name) {
+
+    if (useFocus) {
       content += ` <label>${game.i18n.localize("WITCHER.Spell.ChooseFocus")}: <select name="focus">${focusOptions}</select></label> <br />`
       content += ` <label>${game.i18n.localize("WITCHER.Spell.ChooseExpandedFocus")}: <select name="secondFocus">${secondFocusOptions}</select></label> <br />`
     }
@@ -1201,24 +1273,22 @@ export default class WitcherActorSheet extends ActorSheet {
     if (cancel) {
       return
     }
+    let origStaCost = staCostTotal
     let newSta = this.actor.system.derivedStats.sta.value
-    if (isExtraAttack) {
-      newSta -= 3
-      if (newSta < 0) {
-        return ui.notifications.error(game.i18n.localize("WITCHER.Spell.notEnoughSta"));
-      }
-      this.actor.update({
-        'system.derivedStats.sta.value': newSta
-      });
-    }
-    let staCostdisplay = staCostTotal;
 
-    staCostTotal -= focusValue - secondFocusValue
+    staCostTotal -= Number(focusValue) + Number(secondFocusValue)
+    if (isExtraAttack) {
+      staCostTotal += 3
+    }
+
+    let useMinimalStaCost = false
     if (staCostTotal < 1) {
+      useMinimalStaCost = true
       staCostTotal = 1
     }
 
     newSta -= staCostTotal
+
     if (newSta < 0) {
       return ui.notifications.error(game.i18n.localize("WITCHER.Spell.notEnoughSta"));
     }
@@ -1226,7 +1296,19 @@ export default class WitcherActorSheet extends ActorSheet {
     this.actor.update({
       'system.derivedStats.sta.value': newSta
     });
-    staCostdisplay += `-${Number(focusValue) + Number(secondFocusValue)}[Focus]`
+
+    //todo check whether we need to spent 1 STA even if focus value > STA cost
+    let staCostdisplay = `${origStaCost}[${game.i18n.localize("WITCHER.Spell.Short.StaCost")}]`
+
+    if (isExtraAttack) {
+      staCostdisplay += ` + 3[${game.i18n.localize("WITCHER.Dialog.attackExtra")}]`
+    }
+
+    staCostdisplay += ` - ${Number(focusValue) + Number(secondFocusValue)}[${game.i18n.localize("WITCHER.Actor.DerStat.Focus")}]`
+    staCostdisplay += ` =  ${staCostTotal}`
+    if (useMinimalStaCost) {
+      staCostdisplay += `[${game.i18n.localize("WITCHER.MinValue")}]`
+    }
 
     if (customModifier < 0) { rollFormula += !displayRollDetails ? `${customModifier}` : `${customModifier}[${game.i18n.localize("WITCHER.Settings.Custom")}]` }
     if (customModifier > 0) { rollFormula += !displayRollDetails ? `+${customModifier}` : `+${customModifier}[${game.i18n.localize("WITCHER.Settings.Custom")}]` }
@@ -1278,7 +1360,8 @@ export default class WitcherActorSheet extends ActorSheet {
       let effects = JSON.stringify(spellItem.system.effects)
       let locationJSON = JSON.stringify(this.actor.getLocationObject("randomSpell"))
 
-      messageData.flavor += `<button class="damage" data-img="${spellItem.img}" data-name="${spellItem.name}" data-dmg="${spellItem.system.damage}" data-location='${locationJSON}' data-effects='${effects}'>${game.i18n.localize("WITCHER.table.Damage")}</button>`;
+      let dmg = spellItem.system.damage || "0"
+      messageData.flavor += `<button class="damage" data-img="${spellItem.img}" data-name="${spellItem.name}" data-dmg="${dmg}" data-location='${locationJSON}' data-effects='${effects}'>${game.i18n.localize("WITCHER.table.Damage")}</button>`;
     }
 
     let config = new RollConfig()
@@ -1863,6 +1946,21 @@ export default class WitcherActorSheet extends ActorSheet {
     let item = this.actor.items.get(itemId);
 
     item.sheet.render(true)
+  }
+
+  async _onItemShow(event) {
+    event.preventDefault;
+    let itemId = event.currentTarget.closest(".item").dataset.itemId;
+    let item = this.actor.items.get(itemId);
+
+    new Dialog({
+      title: item.name,
+      content: `<img src="${item.img}" alt="${item.img}" width="100%" />`,
+      buttons: {}
+    }, {
+      width: 520,
+      resizable: true
+    }).render(true);
   }
 
   async _onItemDelete(event) {
@@ -2547,5 +2645,10 @@ export default class WitcherActorSheet extends ActorSheet {
       totalStats += data.system.stats[element].max;
     }
     return totalStats;
+  }
+
+  /** Do not delete. This method is here to give external modules the possibility to make skill rolls. */
+  async _onSkillRoll(statNum, skillNum) {
+    rollSkillCheck(this.actor, statNum, skillNum);
   }
 }
